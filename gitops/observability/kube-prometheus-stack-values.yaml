@@ -2,6 +2,12 @@ alertmanager:
   enabled: false
 
 grafana:
+  # Keep credentials outside Helm rendering so Argo CD does not generate a
+  # different random admin password on every comparison.
+  admin:
+    existingSecret: monitoring-grafana
+    userKey: admin-user
+    passwordKey: admin-password
   service:
     type: ClusterIP
   ingress:
@@ -50,4 +56,3 @@ kubeProxy:
   enabled: false
 kubeScheduler:
   enabled: false
-
