@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-lab-alert-pipeline-test
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: ai-lab.learning
+      rules:
+        - alert: AiLabAlertPipelineTest
+          expr: vector(1)
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: AI Lab 告警链路测试
+            description: PrometheusRule 到 Alertmanager 再到 Webhook 的端到端测试告警。

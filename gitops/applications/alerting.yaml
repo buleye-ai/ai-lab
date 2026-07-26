@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alerting
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/buleye-ai/ai-lab.git
+    targetRevision: main
+    path: gitops/observability/alerting
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

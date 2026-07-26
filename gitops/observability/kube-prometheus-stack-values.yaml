@@ -1,5 +1,44 @@
 alertmanager:
-  enabled: false
+  enabled: true
+  config:
+    global:
+      resolve_timeout: 1m
+    route:
+      receiver: "null"
+      group_by:
+        - alertname
+        - namespace
+      group_wait: 5s
+      group_interval: 30s
+      repeat_interval: 1h
+      routes:
+        - receiver: local-webhook
+          matchers:
+            - alertname = "AiLabAlertPipelineTest"
+    receivers:
+      - name: "null"
+      - name: local-webhook
+        webhook_configs:
+          - url: http://alert-webhook.observability.svc.cluster.local:8080/alerts
+            send_resolved: true
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - alertmanager.localhost
+    paths:
+      - /
+  alertmanagerSpec:
+    replicas: 1
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
 
 grafana:
   # Keep credentials outside Helm rendering so Argo CD does not generate a
