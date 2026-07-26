@@ -9,7 +9,8 @@ spec:
     - name: ai-lab.learning
       rules:
         - alert: AiLabAlertPipelineTest
-          expr: vector(1)
+          # Change to vector(1) only while testing the alert pipeline.
+          expr: vector(0)
           for: 30s
           labels:
             severity: warning
