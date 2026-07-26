@@ -9,8 +9,9 @@ spec:
     - name: ai-lab.learning
       rules:
         - alert: AiLabAlertPipelineTest
-          # Change to vector(1) only while testing the alert pipeline.
-          expr: vector(0)
+          # Change to vector(1) while testing. An alert resolves only when the
+          # expression returns an empty vector; a bare vector(0) still fires.
+          expr: vector(0) == 1
           for: 30s
           labels:
             severity: warning
