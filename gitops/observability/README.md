@@ -17,6 +17,7 @@ Traefik Ingress
   ▼
 Grafana
   ├── Prometheus ── kube-state-metrics / node-exporter / ServiceMonitor
+  │       └── PrometheusRule → Alertmanager → Webhook / 真实通知渠道
   └── Loki ◀──────── Grafana Alloy ◀── Kubernetes Pod logs
 ```
 
@@ -25,8 +26,10 @@ Grafana
 | 组件 | Helm Chart | 用途 |
 | --- | --- | --- |
 | Prometheus/Grafana | `kube-prometheus-stack` `87.19.1` | 指标采集、存储、查询和展示 |
+| Alertmanager | 包含在 `kube-prometheus-stack` | 告警分组、抑制、路由和通知 |
 | Loki | `loki` `7.1.0` | Kubernetes 日志存储和查询 |
 | Alloy | `alloy` `1.11.0` | 通过 Kubernetes API 采集 Pod 日志 |
+| Alert Webhook | 原生 Kubernetes 资源 | 本地接收通知并在日志中保留测试证据 |
 
 所有业务 Service 均使用 `ClusterIP`。只有现有 Traefik 负责集群入口，避免多个 `LoadBalancer` 抢占 k3d 节点的 `80/443` 端口。
 
@@ -37,11 +40,13 @@ Grafana
 - IngressClass：`traefik`
 - StorageClass：`local-path`
 - Grafana 地址：`http://grafana.localhost:8080`
+- Alertmanager 地址：`http://alertmanager.localhost:8080`
 - Prometheus指标保留时间：7 天
 - Prometheus PVC：10 GiB
+- Alertmanager PVC：2 GiB
 - Loki PVC：10 GiB
 - Grafana PVC：5 GiB
-- Alertmanager：本地环境暂未启用
+- Alertmanager：单副本，已启用
 
 ## 3. 前置检查
 
@@ -92,11 +97,29 @@ helm repo add grafana \
 helm repo update
 ```
 
-## 5. 部署
+## 5. 部署方式
 
-在本目录执行以下命令。
+### 5.1 推荐：由 Argo CD 持续管理
 
-### 5.1 Prometheus 和 Grafana
+首次引导：
+
+```bash
+kubectl apply -f ../bootstrap/root-application.yaml
+kubectl get applications -n argocd
+```
+
+此后配置变更流程为：
+
+```text
+修改 YAML → 本地渲染校验 → git commit → git push
+→ Argo CD 比较 desired/live state → 自动同步 → 健康检查
+```
+
+不要再对已经由 Argo CD 管理的 release 手工执行 `helm upgrade`，否则会制造
+绕过 Git 审计的配置漂移。下面的 Helm 命令仅用于理解安装过程、首次迁移或故障
+恢复参考。
+
+### 5.2 Prometheus 和 Grafana
 
 ```bash
 helm upgrade --install monitoring \
@@ -116,7 +139,7 @@ helm upgrade --install monitoring \
 - Prometheus 指标保留 7 天，最大约 8 GB。
 - 默认 k3s 未暴露部分控制平面指标端点，因此禁用了对应 ServiceMonitor。
 
-### 5.2 Loki
+### 5.3 Loki
 
 ```bash
 helm upgrade --install loki \
@@ -138,7 +161,7 @@ helm upgrade --install loki \
 
 该配置用于开发和实验环境，不适合作为生产高可用配置。
 
-### 5.3 Alloy
+### 5.4 Alloy
 
 ```bash
 helm upgrade --install alloy \
@@ -172,10 +195,11 @@ kubectl get pods -n observability -o wide
 kubectl get pvc -n observability
 ```
 
-预期存在三个 Bound PVC：
+预期存在四个 Bound PVC：
 
 - `monitoring-grafana`
 - Prometheus 数据卷
+- Alertmanager 数据卷
 - `storage-loki-0`
 
 检查 Ingress：
@@ -203,6 +227,15 @@ kubectl logs -n observability \
   -c alloy \
   --tail=100
 ```
+
+检查 GitOps 状态：
+
+```bash
+kubectl get applications -n argocd
+```
+
+`ai-lab`、`monitoring`、`loki`、`alloy`、`alerting` 应全部为
+`Synced / Healthy`。
 
 ## 7. 访问 Grafana
 
@@ -239,7 +272,64 @@ kubectl port-forward \
 
 然后访问 `http://localhost:3000`。
 
-## 8. 使用 Grafana
+## 8. 告警链路
+
+### 8.1 控制流与数据流
+
+```text
+Git 中的 PrometheusRule
+  ↓ Argo CD 同步
+Prometheus Operator 校验并生成 Prometheus 规则配置
+  ↓ 周期评估 PromQL
+Prometheus 产生 pending / firing
+  ↓ 发送告警实例
+Alertmanager 分组、抑制、静默、路由
+  ↓ webhook_configs
+alert-webhook 接收 firing / resolved
+```
+
+Prometheus 决定“何时告警”，Alertmanager 决定“告警发给谁、何时合并发送”。
+二者职责不同。
+
+### 8.2 访问和检查
+
+浏览器：
+
+```text
+http://alertmanager.localhost:8080
+```
+
+资源状态：
+
+```bash
+kubectl get alertmanager,pod,pvc,ingress -n observability
+kubectl get prometheusrule ai-lab-alert-pipeline-test -n observability
+kubectl logs deployment/alert-webhook -n observability
+```
+
+### 8.3 端到端测试
+
+仓库中的测试规则默认不触发：
+
+```promql
+vector(0) == 1
+```
+
+测试时将表达式改为：
+
+```promql
+vector(1)
+```
+
+提交并推送，等待 `for: 30s` 和 Alertmanager 的 `group_wait`，然后检查 Webhook
+日志，应出现 `status: firing`。测试完成后把表达式改回
+`vector(0) == 1`，再次提交并推送，应出现 `status: resolved`。
+
+注意：裸 `vector(0)` 仍返回一条样本值为 0 的时间序列。Prometheus 告警判断
+结果向量是否为空，因此裸 `vector(0)` 仍会触发；比较表达式失败后返回空向量，
+才会真正 resolve。
+
+## 9. 使用 Grafana
 
 ### 8.1 查看监控
 
@@ -275,9 +365,9 @@ kubectl port-forward \
 
 Alloy 第一次启动时可能尝试发送容器已有的历史日志。部分过旧或乱序日志可能被 Loki 拒绝，实时日志采集不受影响。
 
-## 9. 配置更新
+## 10. 配置更新
 
-修改对应 values 文件后，重新执行相同的 `helm upgrade --install` 命令。
+修改对应 values 或告警清单后，先本地渲染，再提交并推送，由 Argo CD 同步。
 
 建议在更新 Chart 前先渲染检查：
 
@@ -288,6 +378,9 @@ helm template monitoring \
   --namespace observability \
   --values kube-prometheus-stack-values.yaml \
   >/dev/null
+
+kubectl kustomize ../applications >/dev/null
+kubectl kustomize alerting >/dev/null
 ```
 
 升级前查看新版本：
@@ -300,7 +393,7 @@ helm search repo grafana/alloy --versions
 
 升级 Chart 版本时应同步修改本文和部署命令中的固定版本，并检查官方 release notes。
 
-## 10. 常见问题
+## 11. 常见问题
 
 ### Grafana 无法打开
 
@@ -343,9 +436,13 @@ kubectl get events -n observability --sort-by=.lastTimestamp
 kubectl describe pod -n observability <pod-name>
 ```
 
-## 11. 卸载
+## 12. 卸载
 
-卸载 Helm releases：
+当前资源由 Argo CD 管理。直接执行 `helm uninstall` 后，Argo CD self-heal
+可能重新创建资源。需要清理时，应先删除或禁用对应 Application，再处理 release
+和 PVC。
+
+如果已停止 Argo CD 管理，再卸载 Helm releases：
 
 ```bash
 helm uninstall alloy -n observability
@@ -368,7 +465,7 @@ kubectl delete namespace observability
 
 删除 PVC 和 namespace 会导致本地监控与日志数据不可恢复，操作前应再次确认。
 
-## 12. GitHub 维护建议
+## 13. GitHub 维护建议
 
 提交前检查：
 

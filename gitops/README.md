@@ -15,9 +15,11 @@ macOS
         ├── Argo CD
         └── Observability
             ├── Prometheus
+            ├── Alertmanager
             ├── Grafana
             ├── Loki
-            └── Alloy
+            ├── Alloy
+            └── Alert Webhook（本地链路验证）
 ```
 
 本地访问入口：
@@ -26,6 +28,7 @@ macOS
 | --- | --- |
 | Argo CD | `http://argocd.localhost:8080` |
 | Grafana | `http://grafana.localhost:8080` |
+| Alertmanager | `http://alertmanager.localhost:8080` |
 
 ## 2. 为什么使用 k3d
 
@@ -273,12 +276,14 @@ argocd login argocd.localhost:8080 \
   --username admin \
   --password "$ARGOCD_PASSWORD" \
   --plaintext \
+  --insecure \
   --grpc-web
 ```
 
 参数说明：
 
 - `--plaintext`：当前入口使用 HTTP，不启用客户端 TLS。
+- `--insecure`：跳过当前本地实验入口的证书校验。
 - `--grpc-web`：通过普通 Traefik Ingress 使用 Argo CD 的 gRPC-Web 接口。
 
 验证 CLI 登录状态：
@@ -288,9 +293,33 @@ argocd account get-user-info
 argocd app list
 ```
 
-初始密码 Secret 可能在密码修改或安全清理后被删除。此时
-`argocd admin initial-password` 将无法继续读取密码，应使用已经修改后的密码
-登录。
+`argocd admin initial-password` 只能读取“安装时生成的初始密码”，不能读取后来
+修改过的密码。即使初始 Secret 仍存在，管理员密码一旦被修改，读取到的初始密码
+也不能再用于登录。初始 Secret 被删除后，该命令则会直接失败。
+
+如果只需要从本机管理 Application，可以绕过 Argo CD Server 的登录认证，使用
+Argo CD CLI 的 core 模式。core 模式通过 kubeconfig 直接操作 Kubernetes 中的
+Argo CD CRD：
+
+```bash
+argocd app list --core
+argocd app get monitoring --core
+argocd app sync monitoring --core
+```
+
+core 模式要求当前 kubeconfig 有权限访问集群，默认命名空间还应指向 `argocd`。
+为了不修改日常 context，可以创建临时 kubeconfig：
+
+```bash
+ARGOCD_CORE_KUBECONFIG="$(mktemp /tmp/ai-lab-argocd-kubeconfig.XXXXXX)"
+kubectl config view --raw --flatten >"$ARGOCD_CORE_KUBECONFIG"
+kubectl config set-context --current \
+  --namespace=argocd \
+  --kubeconfig "$ARGOCD_CORE_KUBECONFIG"
+
+KUBECONFIG="$ARGOCD_CORE_KUBECONFIG" argocd app list --core
+rm -f "$ARGOCD_CORE_KUBECONFIG"
+```
 
 如果 Ingress 不可用，可以临时端口转发：
 
@@ -319,7 +348,69 @@ helm search repo argo/argo-cd --versions
 
 升级版本前应查看 Argo CD 和 Chart release notes。
 
-## 7. 安装监控和日志
+## 7. 使用 Argo CD 接管监控、日志与告警
+
+仓库采用 App of Apps：
+
+```text
+gitops/bootstrap/root-application.yaml
+└── ai-lab Application
+    └── gitops/applications/
+        ├── monitoring Application
+        ├── loki Application
+        ├── alloy Application
+        └── alerting Application
+```
+
+根 Application 只管理子 Application；子 Application 再分别管理 Helm Chart
+或原生 Kubernetes 资源。Git 是期望状态，Kubernetes API 是实时状态，Argo CD
+持续比较两者并执行同步。
+
+首次引导只需在集群外执行一次：
+
+```bash
+kubectl apply -f gitops/bootstrap/root-application.yaml
+```
+
+检查：
+
+```bash
+kubectl get applications -n argocd
+```
+
+预期所有 Application 都为：
+
+```text
+Synced   Healthy
+```
+
+Monitoring、Loki 和 Alloy 使用 Argo CD multi-source Application：Chart 来自
+上游 Helm 仓库，values 来自本 Git 仓库。修改 values 后应提交并推送 Git，
+不再直接执行 `helm upgrade`。Alerting Application 管理本地 Webhook 和测试
+`PrometheusRule`。
+
+自动同步配置：
+
+```yaml
+automated:
+  enabled: true
+  prune: true
+  selfHeal: true
+```
+
+- `enabled`：Git 变化后自动同步；
+- `prune`：删除 Git 中已经移除的受管资源；
+- `selfHeal`：集群资源被手工修改后，恢复成 Git 声明。
+
+验证 self-heal：
+
+```bash
+kubectl scale deployment alloy -n observability --replicas=2
+kubectl get deployment alloy -n observability --watch
+```
+
+Git 声明为 1 副本，Argo CD 应自动恢复为 1。该实验验证的是控制循环，而不是
+`kubectl scale` 命令本身。
 
 可观测性套件的完整安装、验证、访问、升级和卸载说明见：
 
@@ -329,6 +420,7 @@ helm search repo argo/argo-cd --versions
 
 ```text
 http://grafana.localhost:8080
+http://alertmanager.localhost:8080
 ```
 
 ## 8. 常用运维命令
@@ -393,11 +485,23 @@ k3d cluster delete ai-lab
 ```text
 gitops/
 ├── README.md
+├── bootstrap/
+│   └── root-application.yaml
+├── applications/
+│   ├── kustomization.yaml
+│   ├── monitoring.yaml
+│   ├── loki.yaml
+│   ├── alloy.yaml
+│   └── alerting.yaml
 └── observability/
     ├── README.md
     ├── alloy-values.yaml
     ├── kube-prometheus-stack-values.yaml
-    └── loki-values.yaml
+    ├── loki-values.yaml
+    └── alerting/
+        ├── kustomization.yaml
+        ├── prometheus-rule.yaml
+        └── webhook-receiver.yaml
 ```
 
 Argo CD 使用 Helm 参数直接创建 `ClusterIP` Service 和 Traefik Ingress，因此不再保存自动生成的安装清单或独立 Ingress 文件。
