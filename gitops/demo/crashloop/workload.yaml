@@ -33,7 +33,7 @@ spec:
           env:
             # Set to healthy through Git to recover the workload.
             - name: LAB_MODE
-              value: healthy
+              value: crash
           command:
             - python
             - -c
