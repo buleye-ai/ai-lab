@@ -20,14 +20,11 @@ spec:
             description: PrometheusRule 到 Alertmanager 再到 Webhook 的端到端测试告警。
         - alert: PodCrashLooping
           expr: |
-            max by (namespace, pod, container) (
-              max_over_time(
-                kube_pod_container_status_waiting_reason{
-                  namespace="demo",
-                  reason="CrashLoopBackOff"
-                }[5m]
-              )
-            ) == 1
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="demo"
+              }[5m]
+            ) > 1
           for: 30s
           labels:
             severity: warning
