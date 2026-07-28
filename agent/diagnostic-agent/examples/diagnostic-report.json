@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "trace_id": "diag-20260728-0001",
+  "event_status": "firing",
+  "generated_at": "2026-07-28T13:31:05Z",
+  "alert": {
+    "name": "PodCrashLooping",
+    "fingerprint": "5c8d19e24b6c72f1",
+    "labels": {
+      "namespace": "demo",
+      "pod": "demo-api-7f8d9c6b5-x2abc",
+      "container": "api",
+      "severity": "warning"
+    }
+  },
+  "summary": "demo-api 容器持续重启，现有证据指向启动配置错误。",
+  "evidence": [
+    {
+      "source": "alertmanager",
+      "observation": "PodCrashLooping 当前为 firing。",
+      "collected_at": "2026-07-28T13:31:00Z",
+      "query_ref": "alert:5c8d19e24b6c72f1"
+    },
+    {
+      "source": "kubernetes",
+      "observation": "容器 api 的 restartCount 为 8，当前状态为 CrashLoopBackOff。",
+      "collected_at": "2026-07-28T13:31:01Z",
+      "query_ref": "k8s:demo/pod/demo-api-7f8d9c6b5-x2abc"
+    },
+    {
+      "source": "prometheus",
+      "observation": "最近十分钟容器重启次数增加了 8 次。",
+      "collected_at": "2026-07-28T13:31:02Z",
+      "query_ref": "promql:increase(kube_pod_container_status_restarts_total[10m])"
+    },
+    {
+      "source": "loki",
+      "observation": "容器日志出现 configuration file not found。",
+      "collected_at": "2026-07-28T13:31:03Z",
+      "query_ref": "logql:{namespace=\"demo\",pod=\"demo-api-7f8d9c6b5-x2abc\"}"
+    }
+  ],
+  "hypotheses": [
+    {
+      "cause": "容器启动参数引用了不存在的配置文件。",
+      "confidence": 0.88,
+      "evidence_refs": [
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "recommended_actions": [
+    "检查 Deployment 的 command、args 和 volumeMounts。",
+    "确认 ConfigMap key 与容器内目标路径一致。",
+    "修复应通过 Git 提交并由 Argo CD 同步。"
+  ],
+  "tool_calls": [
+    {
+      "tool": "kubernetes.get",
+      "status": "succeeded",
+      "started_at": "2026-07-28T13:31:01Z",
+      "duration_ms": 24
+    },
+    {
+      "tool": "prometheus.query",
+      "status": "succeeded",
+      "started_at": "2026-07-28T13:31:02Z",
+      "duration_ms": 18
+    },
+    {
+      "tool": "loki.query_range",
+      "status": "succeeded",
+      "started_at": "2026-07-28T13:31:03Z",
+      "duration_ms": 31
+    }
+  ],
+  "safety": {
+    "mode": "read-only",
+    "automatic_action_taken": false,
+    "writes_allowed": false
+  }
+}

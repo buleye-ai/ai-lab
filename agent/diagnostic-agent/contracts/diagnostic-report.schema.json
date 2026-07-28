@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-lab.local/contracts/diagnostic-report.schema.json",
+  "title": "Diagnostic Report",
+  "description": "只读诊断 Agent 输出的结构化报告。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "trace_id",
+    "event_status",
+    "generated_at",
+    "alert",
+    "summary",
+    "evidence",
+    "hypotheses",
+    "recommended_actions",
+    "tool_calls",
+    "safety"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_status": {
+      "type": "string",
+      "enum": [
+        "firing",
+        "resolved"
+      ]
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "alert": {
+      "type": "object",
+      "required": [
+        "name",
+        "fingerprint",
+        "labels"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "observation",
+          "collected_at"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "alertmanager",
+              "kubernetes",
+              "prometheus",
+              "loki"
+            ]
+          },
+          "observation": {
+            "type": "string"
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "query_ref": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "cause",
+          "confidence",
+          "evidence_refs"
+        ],
+        "properties": {
+          "cause": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool",
+          "status",
+          "started_at",
+          "duration_ms"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "kubernetes.get",
+              "kubernetes.list",
+              "prometheus.query",
+              "loki.query_range"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed",
+              "skipped"
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "safety": {
+      "type": "object",
+      "required": [
+        "mode",
+        "automatic_action_taken",
+        "writes_allowed"
+      ],
+      "properties": {
+        "mode": {
+          "const": "read-only"
+        },
+        "automatic_action_taken": {
+          "const": false
+        },
+        "writes_allowed": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

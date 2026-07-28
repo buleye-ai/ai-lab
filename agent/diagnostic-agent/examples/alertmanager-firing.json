@@ -1,0 +1,42 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"PodCrashLooping\", namespace=\"demo\"}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "diagnostic-agent",
+  "groupLabels": {
+    "alertname": "PodCrashLooping",
+    "namespace": "demo"
+  },
+  "commonLabels": {
+    "alertname": "PodCrashLooping",
+    "namespace": "demo",
+    "pod": "demo-api-7f8d9c6b5-x2abc",
+    "container": "api",
+    "severity": "warning"
+  },
+  "commonAnnotations": {
+    "summary": "Pod 持续重启"
+  },
+  "externalURL": "http://alertmanager.localhost:8080",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "PodCrashLooping",
+        "namespace": "demo",
+        "pod": "demo-api-7f8d9c6b5-x2abc",
+        "container": "api",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod 持续重启",
+        "description": "容器在最近十分钟内持续重启。"
+      },
+      "startsAt": "2026-07-28T13:30:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus.local/graph?g0.expr=...",
+      "fingerprint": "5c8d19e24b6c72f1"
+    }
+  ]
+}

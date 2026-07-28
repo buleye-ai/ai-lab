@@ -1,0 +1,15 @@
+FROM python:3.13-alpine
+
+WORKDIR /app
+
+COPY src /app/src
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+USER 65532:65532
+
+EXPOSE 8080
+
+ENTRYPOINT ["python", "-m", "diagnostic_agent.server"]
