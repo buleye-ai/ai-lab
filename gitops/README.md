@@ -2,6 +2,11 @@
 
 本文记录在 macOS 上使用 k3d 运行 K3s，并部署 Argo CD、Traefik 入口和可观测性套件的完整过程。
 
+希望系统掌握 Argo CD 的工作原理、Application、自动同步、App of Apps、
+multi-source、故障实验和生产设计，请阅读：
+
+[Argo CD 掌握教程](argocd-tutorial.md)
+
 ## 1. 整体架构
 
 ```text
