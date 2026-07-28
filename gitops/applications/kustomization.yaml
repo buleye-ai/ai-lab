@@ -5,3 +5,4 @@ resources:
   - monitoring.yaml
   - loki.yaml
   - alloy.yaml
+  - diagnostic-agent.yaml
