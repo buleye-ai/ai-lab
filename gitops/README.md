@@ -7,6 +7,16 @@ multi-source、故障实验和生产设计，请阅读：
 
 [Argo CD 掌握教程](argocd-tutorial.md)
 
+面向公开阅读的两篇系列文章：
+
+- [从零搭建 k3s、GitOps 与可观测性基础平台](https://ai.buleye.com/cloud-native-foundation/)
+- [一个 Pod 崩溃后发生了什么](https://ai.buleye.com/cloud-native-foundation/crashloop-incident)
+
+CrashLoop 实验工作负载默认保持 `LAB_MODE=healthy`。需要触发实验时，通过
+Git 将 `gitops/demo/crashloop/workload.yaml` 改为 `crash`；完成 firing
+证据采集后再改回 `healthy`，由 Argo CD 执行恢复。不要使用 `kubectl edit`
+绕过 Git。
+
 ## 1. 整体架构
 
 ```text
