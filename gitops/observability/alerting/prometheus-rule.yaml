@@ -21,11 +21,13 @@ spec:
         - alert: PodCrashLooping
           expr: |
             max by (namespace, pod, container) (
-              kube_pod_container_status_waiting_reason{
-                namespace="demo",
-                reason="CrashLoopBackOff"
-              } == 1
-            )
+              max_over_time(
+                kube_pod_container_status_waiting_reason{
+                  namespace="demo",
+                  reason="CrashLoopBackOff"
+                }[5m]
+              )
+            ) == 1
           for: 30s
           labels:
             severity: warning
