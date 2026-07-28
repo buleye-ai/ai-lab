@@ -14,7 +14,7 @@ alertmanager:
       routes:
         - receiver: local-webhook
           matchers:
-            - alertname = "AiLabAlertPipelineTest"
+            - alertname =~ "AiLabAlertPipelineTest|PodCrashLooping"
     receivers:
       - name: "null"
       - name: local-webhook

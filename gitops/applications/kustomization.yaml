@@ -6,3 +6,4 @@ resources:
   - loki.yaml
   - alloy.yaml
   - diagnostic-agent.yaml
+  - crashloop-demo.yaml

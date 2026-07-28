@@ -18,3 +18,19 @@ spec:
           annotations:
             summary: AI Lab 告警链路测试
             description: PrometheusRule 到 Alertmanager 再到 Webhook 的端到端测试告警。
+        - alert: PodCrashLooping
+          expr: |
+            max by (namespace, pod, container) (
+              kube_pod_container_status_waiting_reason{
+                namespace="demo",
+                reason="CrashLoopBackOff"
+              } == 1
+            )
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: Demo Pod 持续崩溃
+            description: >-
+              {{ $labels.namespace }}/{{ $labels.pod }} 的
+              {{ $labels.container }} 容器处于 CrashLoopBackOff。

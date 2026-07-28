@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashloop-demo
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: crashloop-demo
+    app.kubernetes.io/part-of: ai-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crashloop-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: crashloop-demo
+        app.kubernetes.io/part-of: ai-lab
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          # Reuse the image already imported into every k3d node. This keeps
+          # the experiment focused on CrashLoopBackOff instead of image pulls.
+          image: diagnostic-agent:dev
+          imagePullPolicy: Never
+          env:
+            # Set to healthy through Git to recover the workload.
+            - name: LAB_MODE
+              value: crash
+          command:
+            - python
+            - -c
+          args:
+            - |
+              import os
+              import sys
+              import time
+
+              if os.environ["LAB_MODE"] == "crash":
+                  print(
+                      "fatal: required config /config/app.yaml not found",
+                      file=sys.stderr,
+                      flush=True,
+                  )
+                  sys.exit(1)
+
+              print("application started successfully", flush=True)
+              while True:
+                  time.sleep(30)
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
