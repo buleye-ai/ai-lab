@@ -72,6 +72,15 @@ grafana:
       isDefault: false
 
 prometheus:
+  # Prometheus UI：仅通过本机 k3d 的 Traefik 入口访问（localhost:8080/8443），
+  # 不暴露 NodePort 或宿主机局域网端口。
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - prometheus.localhost
+    paths:
+      - /
   prometheusSpec:
     retention: 7d
     retentionSize: 8GB
