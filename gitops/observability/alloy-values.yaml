@@ -40,6 +40,14 @@ alloy:
         forward_to = [loki.write.default.receiver]
       }
 
+      // One Deployment replica watches Events cluster-wide. The chart's existing
+      // ClusterRole already grants get/list/watch on core/v1 events.
+      // JSON keeps dynamic details such as object name and message in the log body.
+      loki.source.kubernetes_events "cluster" {
+        log_format = "json"
+        forward_to = [loki.write.default.receiver]
+      }
+
       loki.write "default" {
         endpoint {
           url = "http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push"
