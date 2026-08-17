@@ -7,3 +7,4 @@ resources:
   - alloy.yaml
   - diagnostic-agent.yaml
   - crashloop-demo.yaml
+  - checkout-observability-lab.yaml

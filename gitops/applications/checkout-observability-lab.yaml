@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: checkout-observability-lab
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ai-lab
+    observability.ai-lab/environment: lab
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/buleye-ai/ai-lab.git
+    targetRevision: main
+    path: gitops/observability/checkout-demo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
