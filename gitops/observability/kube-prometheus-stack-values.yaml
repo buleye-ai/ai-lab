@@ -90,19 +90,19 @@ alertmanager:
             send_resolved: true
       - name: lab-critical-webhook
         webhook_configs:
-          - url: http://host.docker.internal:18080/alerts/critical
+          - url: http://host.docker.internal:18082/alerts/critical
             send_resolved: true
       - name: lab-warning-webhook
         webhook_configs:
-          - url: http://host.docker.internal:18080/alerts/warning
+          - url: http://host.docker.internal:18082/alerts/warning
             send_resolved: true
       - name: lab-ticket-webhook
         webhook_configs:
-          - url: http://host.docker.internal:18080/alerts/ticket
+          - url: http://host.docker.internal:18082/alerts/ticket
             send_resolved: true
       - name: lab-info-webhook
         webhook_configs:
-          - url: http://host.docker.internal:18080/alerts/info
+          - url: http://host.docker.internal:18082/alerts/info
             send_resolved: true
   ingress:
     enabled: true
