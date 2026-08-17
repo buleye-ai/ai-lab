@@ -40,13 +40,13 @@ spec:
           imagePullPolicy: Never
           env:
             - name: LAB_MODE
-              value: unhealthy
+              value: healthy
             - name: SERVICE_NAME
               value: checkout-demo
             - name: ENVIRONMENT
               value: lab
             - name: REVISION
-              value: incident-2026-08-18-03
+              value: baseline
           command:
             - python
             - -c
