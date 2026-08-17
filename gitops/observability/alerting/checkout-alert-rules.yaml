@@ -84,7 +84,7 @@ spec:
               target_service="checkout-demo",
               environment="lab"
             }[1m]) == 0
-          for: 1m
+          for: 2m
           labels:
             severity: warning
             cluster: k3d-ai-lab
