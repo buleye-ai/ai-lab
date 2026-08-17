@@ -5,3 +5,4 @@ resources:
   - workload.yaml
   - service.yaml
   - servicemonitor.yaml
+  - synthetic-checker.yaml

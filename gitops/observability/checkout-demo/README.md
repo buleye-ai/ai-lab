@@ -50,6 +50,23 @@ curl -fsS http://127.0.0.1:18081/metrics
 
 预期：Deployment 为 `3/3 Available`，EndpointSlice 有 3 个 ready endpoint，`/healthz` 和 `/checkout` 返回 200，Prometheus target 为 UP，且当前本机 Alertmanager webhook 无新 POST。
 
+## Step 2：独立 Synthetic Checker 与告警分级（待运行时验证）
+
+`checkout-synthetic-checker` 每 5 秒从集群内请求 `checkout-demo` 的 `/checkout` 路径，并暴露自身成功、失败和延迟 Metrics。它是 Lab 的独立请求观察者，不接触外部入口、支付或生产通知渠道。
+
+`checkout-alert-rules.yaml` 仅为 `environment=lab`、`cluster=k3d-ai-lab`、`service=checkout-demo` 定义四个真实检测信号：
+
+| Alert | Severity | 检测与响应意图 |
+| --- | --- | --- |
+| `CheckoutAvailabilitySLOViolation` | `critical` | 两分钟探测失败率超过 20%，持续一分钟；立即按 Runbook 核查业务路径与 Git/Argo 变更 |
+| `CheckoutSyntheticProbeFailed` | `warning` | 独立探测失败症状；critical 同服务告警存在时应被抑制通知 |
+| `CheckoutDeploymentUnavailable` | `warning` | 副本不可用风险，不单独等价于用户影响 |
+| `CheckoutErrorBudgetBurnSlow` | `ticket` | 10 分钟超过 2% 的低速失败，创建计划治理工作 |
+
+Alertmanager 用四个独立的逻辑 receiver 路由 `critical`、`warning`、`ticket`、`info`，全部只投递到本机 inspector 的不同路径：`/alerts/critical`、`/alerts/warning`、`/alerts/ticket`、`/alerts/info`。因此 Lab 能验证真实 route、group、dedup、inhibition 和 resolved 行为，但不会投递到旧的 `alert-webhook`、diagnostic-agent、Pager、ChatOps 或工单系统。
+
+critical 对同集群、环境、命名空间和服务的 warning 生效 inhibit。被抑制的 warning 仍可在 Alertmanager 查询到，但不应再通知，避免用户影响事故期间症状刷屏。
+
 ## 演练记录和回滚
 
 每次演练在 `records/` 新建 `YYYY-MM-DD-编号.md`，同时将**同一份脱敏记录**复制到私有学习库：

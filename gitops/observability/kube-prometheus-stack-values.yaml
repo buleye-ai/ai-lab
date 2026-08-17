@@ -12,9 +12,71 @@ alertmanager:
       group_interval: 30s
       repeat_interval: 1h
       routes:
+        # Existing learning alerts retain their current three-destination route.
         - receiver: local-webhook
           matchers:
             - alertname =~ "AiLabAlertPipelineTest|PodCrashLooping"
+
+        # checkout-demo is isolated to the local receiver and never reaches the
+        # legacy alert-webhook or diagnostic-agent destinations.
+        - receiver: lab-critical-webhook
+          matchers:
+            - environment = "lab"
+            - cluster = "k3d-ai-lab"
+            - service = "checkout-demo"
+            - severity = "critical"
+          group_by: [alertname, cluster, environment, namespace, service]
+          group_wait: 5s
+          group_interval: 30s
+          repeat_interval: 2m
+        - receiver: lab-warning-webhook
+          matchers:
+            - environment = "lab"
+            - cluster = "k3d-ai-lab"
+            - service = "checkout-demo"
+            - severity = "warning"
+          group_by: [alertname, cluster, environment, namespace, service]
+          group_wait: 10s
+          group_interval: 1m
+          repeat_interval: 5m
+        - receiver: lab-ticket-webhook
+          matchers:
+            - environment = "lab"
+            - cluster = "k3d-ai-lab"
+            - service = "checkout-demo"
+            - severity = "ticket"
+          group_by: [alertname, cluster, environment, namespace, service]
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 30m
+        - receiver: lab-info-webhook
+          matchers:
+            - environment = "lab"
+            - cluster = "k3d-ai-lab"
+            - service = "checkout-demo"
+            - severity = "info"
+          group_by: [alertname, cluster, environment, namespace, service]
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 1h
+    inhibit_rules:
+      # A user-impacting critical alert suppresses lower-level symptoms only for
+      # this lab service and the same cluster/environment/namespace/service.
+      - source_matchers:
+          - environment = "lab"
+          - cluster = "k3d-ai-lab"
+          - service = "checkout-demo"
+          - severity = "critical"
+        target_matchers:
+          - environment = "lab"
+          - cluster = "k3d-ai-lab"
+          - service = "checkout-demo"
+          - severity = "warning"
+        equal:
+          - cluster
+          - environment
+          - namespace
+          - service
     receivers:
       - name: "null"
       - name: local-webhook
@@ -25,6 +87,22 @@ alertmanager:
             send_resolved: true
           # Local debugging endpoint on the OrbStack macOS host.
           - url: http://host.docker.internal:18080/alerts
+            send_resolved: true
+      - name: lab-critical-webhook
+        webhook_configs:
+          - url: http://host.docker.internal:18080/alerts/critical
+            send_resolved: true
+      - name: lab-warning-webhook
+        webhook_configs:
+          - url: http://host.docker.internal:18080/alerts/warning
+            send_resolved: true
+      - name: lab-ticket-webhook
+        webhook_configs:
+          - url: http://host.docker.internal:18080/alerts/ticket
+            send_resolved: true
+      - name: lab-info-webhook
+        webhook_configs:
+          - url: http://host.docker.internal:18080/alerts/info
             send_resolved: true
   ingress:
     enabled: true

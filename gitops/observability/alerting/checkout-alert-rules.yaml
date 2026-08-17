@@ -1,0 +1,128 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: checkout-demo-alerts
+  namespace: observability
+  labels:
+    release: monitoring
+    app.kubernetes.io/name: checkout-demo
+    app.kubernetes.io/part-of: ai-lab
+spec:
+  groups:
+    - name: checkout-demo.sli
+      rules:
+        - alert: CheckoutAvailabilitySLOViolation
+          expr: |
+            sum(rate(checkout_synthetic_failures_total{
+              target_service="checkout-demo",
+              environment="lab"
+            }[2m]))
+            /
+            clamp_min(sum(rate(checkout_synthetic_requests_total{
+              target_service="checkout-demo",
+              environment="lab"
+            }[2m])), 0.001) > 0.20
+          for: 1m
+          labels:
+            severity: critical
+            cluster: k3d-ai-lab
+            environment: lab
+            namespace: demo
+            service: checkout-demo
+            team: commerce
+          annotations:
+            summary: Checkout synthetic availability is below 80%
+            description: >-
+              The independent lab checker observed over 20% failed checkout requests
+              for two minutes. Confirm the SLI, EndpointSlice, Pods, logs, Events and
+              Git/Argo revision before choosing Git rollback or recovery.
+            runbook_url: >-
+              https://github.com/buleye-ai/ai-lab/blob/main/gitops/observability/checkout-demo/README.md
+
+        - alert: CheckoutErrorBudgetBurnSlow
+          expr: |
+            sum(rate(checkout_synthetic_failures_total{
+              target_service="checkout-demo",
+              environment="lab"
+            }[10m]))
+            /
+            clamp_min(sum(rate(checkout_synthetic_requests_total{
+              target_service="checkout-demo",
+              environment="lab"
+            }[10m])), 0.001) > 0.02
+            and
+            sum(rate(checkout_synthetic_failures_total{
+              target_service="checkout-demo",
+              environment="lab"
+            }[10m]))
+            /
+            clamp_min(sum(rate(checkout_synthetic_requests_total{
+              target_service="checkout-demo",
+              environment="lab"
+            }[10m])), 0.001) <= 0.20
+          for: 10m
+          labels:
+            severity: ticket
+            cluster: k3d-ai-lab
+            environment: lab
+            namespace: demo
+            service: checkout-demo
+            team: commerce
+          annotations:
+            summary: Checkout has sustained low-rate synthetic failures
+            description: >-
+              Synthetic checkout failures exceed 2% but do not meet the critical
+              threshold. Create planned remediation work; this is not an immediate Page.
+            runbook_url: >-
+              https://github.com/buleye-ai/ai-lab/blob/main/gitops/observability/checkout-demo/README.md
+
+    - name: checkout-demo.runtime
+      rules:
+        - alert: CheckoutSyntheticProbeFailed
+          expr: |
+            min_over_time(checkout_synthetic_probe_success{
+              target_service="checkout-demo",
+              environment="lab"
+            }[1m]) == 0
+          for: 1m
+          labels:
+            severity: warning
+            cluster: k3d-ai-lab
+            environment: lab
+            namespace: demo
+            service: checkout-demo
+            team: commerce
+          annotations:
+            summary: Checkout synthetic probe is failing
+            description: >-
+              The independent in-cluster checker could not complete the checkout path.
+              This symptom is inhibited when the service-level critical alert fires.
+            runbook_url: >-
+              https://github.com/buleye-ai/ai-lab/blob/main/gitops/observability/checkout-demo/README.md
+
+        - alert: CheckoutDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_available{
+              namespace="demo",
+              deployment="checkout-demo"
+            }
+            <
+            kube_deployment_spec_replicas{
+              namespace="demo",
+              deployment="checkout-demo"
+            }
+          for: 2m
+          labels:
+            severity: warning
+            cluster: k3d-ai-lab
+            environment: lab
+            namespace: demo
+            service: checkout-demo
+            team: commerce
+          annotations:
+            summary: Checkout Deployment has unavailable replicas
+            description: >-
+              Available checkout replicas are below desired replicas. This indicates
+              runtime risk, not proven end-user impact by itself.
+            runbook_url: >-
+              https://github.com/buleye-ai/ai-lab/blob/main/gitops/observability/checkout-demo/README.md
