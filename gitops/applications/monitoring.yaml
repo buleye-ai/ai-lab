@@ -16,6 +16,12 @@ spec:
     - repoURL: https://github.com/buleye-ai/ai-lab.git
       targetRevision: main
       ref: values
+    # Grafana sidecar provisions only ConfigMaps carrying grafana_dashboard=1.
+    # Keep dashboard JSON in Git and sync it through this Application rather
+    # than saving unreviewed UI state as the source of truth.
+    - repoURL: https://github.com/buleye-ai/ai-lab.git
+      targetRevision: main
+      path: gitops/observability/grafana-dashboards
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
