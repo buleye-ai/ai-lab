@@ -28,9 +28,9 @@ tempo:
         path: /var/tempo/wal
   # Accept only OTLP/HTTP from the in-cluster Collector. Jaeger, Zipkin and
   # OpenCensus receivers stay disabled to keep the Lab network surface minimal.
+  # Kept solely for the Helm Service template; the real runtime config below
+  # deliberately omits legacy receivers so Tempo never starts them.
   receivers:
-    # The chart's Service template requires these maps to exist. Empty endpoints
-    # prevent Tempo from binding the legacy Jaeger transports.
     jaeger:
       protocols:
         grpc:
@@ -48,6 +48,39 @@ tempo:
           endpoint: ""
         http:
           endpoint: 0.0.0.0:4318
+
+# The chart's generated config includes any placeholders above. Override it so
+# Tempo itself binds only API :3200 and OTLP/HTTP :4318.
+config: |
+  memberlist:
+    cluster_label: "tempo.observability"
+  multitenancy_enabled: false
+  usage_report:
+    reporting_enabled: false
+  compactor:
+    compaction:
+      block_retention: 24h
+  distributor:
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+  ingester: {}
+  server:
+    http_listen_port: 3200
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+  querier: {}
+  query_frontend: {}
+  overrides:
+    defaults: {}
+    per_tenant_override_config: /conf/overrides.yaml
 
 service:
   type: ClusterIP
