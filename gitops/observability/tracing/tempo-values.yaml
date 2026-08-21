@@ -92,7 +92,8 @@ persistence:
     - ReadWriteOnce
   size: 5Gi
 
+# The upstream chart emits a second, nonexistent Jaeger-metrics endpoint even
+# when Tempo Query is disabled. Keep this Lab backend un-scraped until we add a
+# dedicated, single-port ServiceMonitor with the Collector in Step 3.
 serviceMonitor:
-  enabled: true
-  additionalLabels:
-    release: monitoring
+  enabled: false
