@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tracing
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ai-lab
+    observability.ai-lab/environment: lab
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: tempo
+      targetRevision: 1.24.4
+      helm:
+        releaseName: tempo
+        valueFiles:
+          - $values/gitops/observability/tracing/tempo-values.yaml
+    - repoURL: https://github.com/buleye-ai/ai-lab.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -8,3 +8,4 @@ resources:
   - diagnostic-agent.yaml
   - crashloop-demo.yaml
   - checkout-observability-lab.yaml
+  - tracing.yaml

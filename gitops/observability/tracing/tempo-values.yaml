@@ -1,0 +1,65 @@
+# Minimal Tempo backend for the checkout-demo Trace Lab.
+# Scope: one single-binary instance, 24h local retention, no external ingress.
+# This is intentionally not a production HA / multi-tenant deployment.
+replicas: 1
+
+# Pin the application image independently from the Helm chart.
+tempo:
+  tag: "2.9.0"
+  pullPolicy: IfNotPresent
+  multitenancyEnabled: false
+  reportingEnabled: false
+  retention: 24h
+  metricsGenerator:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+  # Accept only OTLP/HTTP from the in-cluster Collector. Jaeger, Zipkin and
+  # OpenCensus receivers stay disabled to keep the Lab network surface minimal.
+  receivers:
+    # The chart's Service template requires these maps to exist. Empty endpoints
+    # prevent Tempo from binding the legacy Jaeger transports.
+    jaeger:
+      protocols:
+        grpc:
+          endpoint: ""
+        thrift_binary:
+          endpoint: ""
+        thrift_compact:
+          endpoint: ""
+        thrift_http:
+          endpoint: ""
+    opencensus: null
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ""
+        http:
+          endpoint: 0.0.0.0:4318
+
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: true
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: monitoring
