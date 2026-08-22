@@ -46,13 +46,13 @@ spec:
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=checkout-demo,deployment.environment=lab,service.version=baseline,k8s.namespace.name=demo,k8s.cluster.name=k3d-ai-lab
             - name: LAB_MODE
-              value: unhealthy
+              value: healthy
             - name: SERVICE_NAME
               value: checkout-demo
             - name: ENVIRONMENT
               value: lab
             - name: REVISION
-              value: trace-incident-2026-08-22-01
+              value: baseline
           command:
             - python
             - -c
