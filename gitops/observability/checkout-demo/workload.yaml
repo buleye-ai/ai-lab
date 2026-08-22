@@ -45,6 +45,10 @@ spec:
               value: http://otel-collector-opentelemetry-collector.observability.svc.cluster.local:4318/v1/traces
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=checkout-demo,deployment.environment=lab,service.version=baseline,k8s.namespace.name=demo,k8s.cluster.name=k3d-ai-lab
+            - name: OTEL_TRACES_SAMPLER
+              value: parentbased_traceidratio
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "0.1"
             - name: INVENTORY_URL
               value: http://inventory-demo.demo.svc.cluster.local:8080/reserve
             - name: LAB_MODE
