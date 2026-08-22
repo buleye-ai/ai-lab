@@ -81,6 +81,9 @@ alloy:
     create: true
     content: |-
       discovery.kubernetes "local_pods" {
+        namespaces {
+          names = ["demo"]
+        }
         selectors {
           role  = "pod"
           field = "spec.nodeName=" + env("MY_NODE_NAME")
