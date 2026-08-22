@@ -1,0 +1,123 @@
+# Minimal OTLP gateway for the checkout-demo Trace Lab.
+# It accepts OTLP/HTTP only, processes traces only, and exports to the in-cluster
+# Tempo Service. No host, log, event, Kubernetes-object or auto-instrumentation
+# collection is enabled.
+mode: deployment
+replicaCount: 1
+
+image:
+  repository: otel/opentelemetry-collector-k8s
+  tag: "0.158.0"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+
+clusterRole:
+  create: false
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi
+
+# Do not enable logsCollection, hostMetrics, kubernetesAttributes,
+# kubeletMetrics or kubernetesEvents presets.
+presets: {}
+
+ports:
+  otlp:
+    enabled: false
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    protocol: TCP
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+  metrics:
+    enabled: true
+    containerPort: 8888
+    servicePort: 8888
+    protocol: TCP
+
+service:
+  type: ClusterIP
+
+serviceMonitor:
+  enabled: true
+  metricsEndpoints:
+    - port: metrics
+      interval: 30s
+  extraLabels:
+    release: monitoring
+
+# `alternateConfig` replaces the chart defaults rather than merging them. This
+# prevents accidental Jaeger, Zipkin, Prometheus receiver and logs/metrics
+# pipelines from becoming part of the Lab.
+alternateConfig:
+  extensions:
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_mib: 384
+      spike_limit_mib: 128
+    batch:
+      send_batch_size: 128
+      timeout: 5s
+  exporters:
+    otlphttp/tempo:
+      endpoint: http://tempo.observability.svc.cluster.local:4318
+      tls:
+        insecure: true
+  service:
+    extensions:
+      - health_check
+    telemetry:
+      metrics:
+        readers:
+          - pull:
+              exporter:
+                prometheus:
+                  host: ${env:MY_POD_IP}
+                  port: 8888
+    pipelines:
+      traces:
+        receivers:
+          - otlp
+        processors:
+          - memory_limiter
+          - batch
+        exporters:
+          - otlphttp/tempo

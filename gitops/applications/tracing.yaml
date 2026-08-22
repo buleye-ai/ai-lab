@@ -16,6 +16,13 @@ spec:
         releaseName: tempo
         valueFiles:
           - $values/gitops/observability/tracing/tempo-values.yaml
+    - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+      chart: opentelemetry-collector
+      targetRevision: 0.170.0
+      helm:
+        releaseName: otel-collector
+        valueFiles:
+          - $values/gitops/observability/tracing/otel-collector-values.yaml
     - repoURL: https://github.com/buleye-ai/ai-lab.git
       targetRevision: main
       ref: values
