@@ -143,6 +143,12 @@ grafana:
     storageClassName: local-path
     size: 5Gi
   additionalDataSources:
+    - name: Tempo (Trace Lab)
+      type: tempo
+      access: proxy
+      url: http://tempo.observability.svc.cluster.local:3200
+      uid: tempo-trace-lab
+      isDefault: false
     - name: Loki
       type: loki
       access: proxy

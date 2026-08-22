@@ -36,9 +36,15 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: diagnostic-agent:dev
+          image: checkout-demo-tracing:dev
           imagePullPolicy: Never
           env:
+            # SDK exports only /checkout spans. The endpoint is cluster-internal
+            # and includes the OTLP/HTTP traces path required by this exporter.
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector-opentelemetry-collector.observability.svc.cluster.local:4318/v1/traces
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=checkout-demo,deployment.environment=lab,service.version=baseline,k8s.namespace.name=demo,k8s.cluster.name=k3d-ai-lab
             - name: LAB_MODE
               value: healthy
             - name: SERVICE_NAME
@@ -57,6 +63,8 @@ spec:
               import time
               import uuid
               from http.server import BaseHTTPRequestHandler, HTTPServer
+              from opentelemetry.trace import Status, StatusCode
+              from tracing_utils import checkout_trace_log_fields, start_checkout_span
 
               service = os.environ["SERVICE_NAME"]
               environment = os.environ["ENVIRONMENT"]
@@ -124,22 +132,28 @@ spec:
                           self.send_json(404, {"error": "not found"})
                           return
 
-                      request_id = str(uuid.uuid4())
-                      elapsed = time.monotonic() - started
-                      metrics["total"] += 1
-                      metrics["latency_sum"] += elapsed
-                      for limit in bucket_limits:
-                          if elapsed <= limit:
-                              buckets[limit] += 1
+                      with start_checkout_span(self.headers.get("traceparent")) as span:
+                          trace_fields = checkout_trace_log_fields(span)
+                          request_id = str(uuid.uuid4())
+                          elapsed = time.monotonic() - started
+                          metrics["total"] += 1
+                          metrics["latency_sum"] += elapsed
+                          for limit in bucket_limits:
+                              if elapsed <= limit:
+                                  buckets[limit] += 1
 
-                      if mode != "healthy":
-                          metrics["errors"] += 1
-                          log("checkout_failed", request_id=request_id, reason="lab_mode_not_healthy", lab_mode=mode)
-                          self.send_json(503, {"error": "checkout temporarily unavailable", "request_id": request_id})
-                          return
+                          if mode != "healthy":
+                              metrics["errors"] += 1
+                              span.set_attribute("http.response.status_code", 503)
+                              span.set_status(Status(StatusCode.ERROR, "lab_mode_not_healthy"))
+                              log("checkout_failed", request_id=request_id, reason="lab_mode_not_healthy", lab_mode=mode, **trace_fields)
+                              self.send_json(503, {"error": "checkout temporarily unavailable", "request_id": request_id})
+                              return
 
-                      log("checkout_succeeded", request_id=request_id)
-                      self.send_json(200, {"status": "accepted", "request_id": request_id, "revision": revision})
+                          span.set_attribute("http.response.status_code", 200)
+                          span.set_status(Status(StatusCode.OK))
+                          log("checkout_succeeded", request_id=request_id, **trace_fields)
+                          self.send_json(200, {"status": "accepted", "request_id": request_id, "revision": revision})
 
               log("application_started", lab_mode=mode)
               HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()

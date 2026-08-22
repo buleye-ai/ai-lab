@@ -1,0 +1,19 @@
+FROM python:3.13-alpine
+
+WORKDIR /app
+
+COPY requirements-tracing.txt /app/
+RUN pip install --no-cache-dir -r requirements-tracing.txt
+
+# Tracing_utils module — baked into image, imported at runtime by inline workload script.
+COPY src/tracing_utils.py /app/src/tracing_utils.py
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+USER 65532:65532
+
+EXPOSE 8080
+
+# No ENTRYPOINT; the workload.yaml provides the inline python -c command.
