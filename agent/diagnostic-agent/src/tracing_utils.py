@@ -103,6 +103,33 @@ def start_checkout_span(traceparent: Optional[str]):
     )
 
 
+
+def inject_traceparent() -> dict:
+    """Inject only the W3C traceparent for the checkout → inventory call.
+
+    Explicit allow-list prevents application headers, bodies, request IDs or
+    credentials from entering propagation data.
+    """
+    carrier = {}
+    propagate.inject(carrier)
+    traceparent = carrier.get("traceparent")
+    return {"traceparent": traceparent} if traceparent else {}
+
+
+def start_inventory_span(traceparent: Optional[str]):
+    """Create the inventory service's safe server span from W3C context."""
+    carrier = {"traceparent": traceparent} if traceparent else {}
+    parent_context = propagate.extract(carrier)
+    return get_tracer().start_as_current_span(
+        "GET /reserve",
+        context=parent_context,
+        attributes={
+            "http.request.method": "GET",
+            "url.path": "/reserve",
+        },
+    )
+
+
 def checkout_trace_log_fields(span) -> dict:
     """Return only fixed-width correlation identifiers for JSON logs."""
     context = span.get_span_context()

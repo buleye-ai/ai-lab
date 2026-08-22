@@ -45,6 +45,8 @@ spec:
               value: http://otel-collector-opentelemetry-collector.observability.svc.cluster.local:4318/v1/traces
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=checkout-demo,deployment.environment=lab,service.version=baseline,k8s.namespace.name=demo,k8s.cluster.name=k3d-ai-lab
+            - name: INVENTORY_URL
+              value: http://inventory-demo.demo.svc.cluster.local:8080/reserve
             - name: LAB_MODE
               value: healthy
             - name: SERVICE_NAME
@@ -61,15 +63,18 @@ spec:
               import json
               import os
               import time
+              import urllib.error
+              import urllib.request
               import uuid
               from http.server import BaseHTTPRequestHandler, HTTPServer
               from opentelemetry.trace import Status, StatusCode
-              from tracing_utils import checkout_trace_log_fields, start_checkout_span
+              from tracing_utils import checkout_trace_log_fields, inject_traceparent, start_checkout_span
 
               service = os.environ["SERVICE_NAME"]
               environment = os.environ["ENVIRONMENT"]
               revision = os.environ["REVISION"]
               mode = os.environ["LAB_MODE"]
+              inventory_url = os.environ["INVENTORY_URL"]
               metrics = {"total": 0, "errors": 0, "latency_sum": 0.0}
               bucket_limits = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, float("inf"))
               buckets = {limit: 0 for limit in bucket_limits}
@@ -150,9 +155,25 @@ spec:
                               self.send_json(503, {"error": "checkout temporarily unavailable", "request_id": request_id})
                               return
 
+                          try:
+                              downstream_request = urllib.request.Request(
+                                  inventory_url,
+                                  headers=inject_traceparent(),
+                              )
+                              with urllib.request.urlopen(downstream_request, timeout=2) as response:
+                                  inventory_status = response.status
+                          except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+                              metrics["errors"] += 1
+                              status_code = error.code if isinstance(error, urllib.error.HTTPError) else 503
+                              span.set_attribute("http.response.status_code", status_code)
+                              span.set_status(Status(StatusCode.ERROR, "inventory_dependency_failed"))
+                              log("checkout_dependency_failed", request_id=request_id, dependency="inventory-demo", dependency_status=status_code, **trace_fields)
+                              self.send_json(503, {"error": "inventory temporarily unavailable", "request_id": request_id})
+                              return
+
                           span.set_attribute("http.response.status_code", 200)
                           span.set_status(Status(StatusCode.OK))
-                          log("checkout_succeeded", request_id=request_id, **trace_fields)
+                          log("checkout_succeeded", request_id=request_id, dependency="inventory-demo", dependency_status=inventory_status, **trace_fields)
                           self.send_json(200, {"status": "accepted", "request_id": request_id, "revision": revision})
 
               log("application_started", lab_mode=mode)

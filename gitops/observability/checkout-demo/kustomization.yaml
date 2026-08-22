@@ -4,5 +4,6 @@ namespace: demo
 resources:
   - workload.yaml
   - service.yaml
+  - inventory-demo.yaml
   - servicemonitor.yaml
   - synthetic-checker.yaml

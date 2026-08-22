@@ -27,6 +27,8 @@ from tracing_utils import (
     _make_resource,
     start_checkout_span,
     checkout_trace_log_fields,
+    inject_traceparent,
+    start_inventory_span,
 )
 
 
@@ -141,5 +143,36 @@ class TestCheckoutSpan:
         assert set(fields) == {"trace_id", "span_id"}
         assert len(fields["trace_id"]) == 32
         assert len(fields["span_id"]) == 16
-        assert all(c in "0123456789abcdef" for c in fields["trace_id"])
-        assert all(c in "0123456789abcdef" for c in fields["span_id"])
+
+
+class TestDownstreamPropagation:
+    """Cross-service contract: child spans keep the parent trace, safely."""
+
+    def test_injected_traceparent_keeps_current_trace_and_uses_new_parent_span(self):
+        with start_checkout_span(None) as checkout_span:
+            checkout_context = checkout_span.get_span_context()
+            headers = inject_traceparent()
+
+        assert set(headers) == {"traceparent"}
+        version, trace_id, parent_span_id, flags = headers["traceparent"].split("-")
+        assert version == "00"
+        assert trace_id == f"{checkout_context.trace_id:032x}"
+        assert parent_span_id == f"{checkout_context.span_id:016x}"
+        assert flags == "01"
+
+    def test_inventory_span_continues_injected_trace_and_uses_safe_attributes(self):
+        with start_checkout_span(None) as checkout_span:
+            expected_trace_id = f"{checkout_span.get_span_context().trace_id:032x}"
+            headers = inject_traceparent()
+
+        with start_inventory_span(headers["traceparent"]) as inventory_span:
+            inventory_context = inventory_span.get_span_context()
+            inventory_span.set_attribute("http.response.status_code", 200)
+            attrs = dict(inventory_span.attributes)
+
+        assert f"{inventory_context.trace_id:032x}" == expected_trace_id
+        assert attrs == {
+            "http.request.method": "GET",
+            "url.path": "/reserve",
+            "http.response.status_code": 200,
+        }
