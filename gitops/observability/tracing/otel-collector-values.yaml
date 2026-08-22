@@ -96,6 +96,23 @@ alternateConfig:
     batch:
       send_batch_size: 128
       timeout: 5s
+    # Lab-only Tail Sampling: wait for a complete trace, retain every ERROR
+    # trace, retain only 10% of normal traffic. Stateful and intentionally
+    # bounded; do not use these values as a production capacity template.
+    tail_sampling:
+      decision_wait: 5s
+      num_traces: 100
+      expected_new_traces_per_sec: 20
+      policies:
+        - name: retain-error-traces
+          type: status_code
+          status_code:
+            status_codes:
+              - ERROR
+        - name: sample-normal-traces
+          type: probabilistic
+          probabilistic:
+            sampling_percentage: 10
   exporters:
     otlp_http/tempo:
       endpoint: http://tempo.observability.svc.cluster.local:4318
@@ -118,6 +135,7 @@ alternateConfig:
           - otlp
         processors:
           - memory_limiter
+          - tail_sampling
           - batch
         exporters:
           - otlp_http/tempo
