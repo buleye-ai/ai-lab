@@ -19,6 +19,14 @@ spec:
         releaseName: pyroscope
         valueFiles:
           - $values/gitops/observability/profiling/pyroscope-values.yaml
+    # Step 2 starts only after Pyroscope 2.2.1 is Synced/Healthy with its 5Gi PVC Bound.
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.11.0
+      helm:
+        releaseName: alloy-profiles-ebpf
+        valueFiles:
+          - $values/gitops/observability/profiling/alloy-profiles-ebpf-values.yaml
     - repoURL: https://github.com/buleye-ai/ai-lab.git
       targetRevision: main
       ref: values
