@@ -1,0 +1,60 @@
+# Step 0 draft: minimal single-process Pyroscope backend for the k3d profiling Lab.
+# This file is intentionally NOT referenced by gitops/applications/kustomization.yaml yet.
+# No application profile scrape annotations or bundled agents are enabled.
+pyroscope:
+  replicaCount: 1
+  disableSelfProfile: true
+  fullnameOverride: pyroscope
+
+  # Lab-only local disk. No object store, ingress, HA, or multi-tenancy.
+  persistence:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+
+  podSecurityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    runAsNonRoot: true
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false # needs its PVC-backed local data directory
+    capabilities:
+      drop:
+        - ALL
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  extraArgs:
+    log.level: info
+    # Smaller local blocks make the short Lab timeline queryable quickly.
+    pyroscopedb.max-block-duration: 15m
+
+# Do not deploy the chart's deprecated bundled agent or its bundled Alloy.
+agent:
+  enabled: false
+alloy:
+  enabled: false
+minio:
+  enabled: false
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: monitoring
+
+ingress:
+  enabled: false
+httpRoute:
+  enabled: false

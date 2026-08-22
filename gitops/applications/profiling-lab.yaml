@@ -1,0 +1,32 @@
+# Step 1: Pyroscope backend only. The eBPF Alloy source is intentionally added
+# only after backend readiness/PVC verification in a separate audited commit.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: profiling-lab
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ai-lab
+    observability.ai-lab/environment: lab
+    observability.ai-lab/risk: privileged-node-profiler
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: pyroscope
+      targetRevision: 2.2.1
+      helm:
+        releaseName: pyroscope
+        valueFiles:
+          - $values/gitops/observability/profiling/pyroscope-values.yaml
+    - repoURL: https://github.com/buleye-ai/ai-lab.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  # Automation is deliberately absent until the constrained PoC is approved.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

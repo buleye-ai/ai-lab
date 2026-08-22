@@ -1,0 +1,118 @@
+# Step 0 draft: isolated node-level eBPF profiling agent.
+# It is deliberately separate from the logs/events Alloy Deployment.
+# This file is NOT referenced by gitops/applications/kustomization.yaml yet.
+# WARNING: pyroscope.ebpf requires root + hostPID + privileged; the target filter
+# limits exported profile labels/data, not the agent's host-level visibility.
+fullnameOverride: alloy-profiles-ebpf
+
+crds:
+  create: false
+
+controller:
+  type: daemonset
+  hostPID: true
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  # Scope the PoC to one explicitly selected worker, rather than every node.
+  nodeSelector:
+    kubernetes.io/hostname: k3d-ai-lab-agent-0
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: true
+
+# Namespace-scoped read-only RBAC: discover Pods in demo only; no log, Event,
+# Node, Secret, config write, or Kubernetes mutation permission.
+rbac:
+  create: true
+  namespaces:
+    - demo
+  rules:
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list", "watch"]
+  clusterRules: []
+
+# This is intentionally the only privileged workload in the PoC.
+global:
+  podSecurityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    seccompProfile:
+      type: Unconfined
+
+alloy:
+  stabilityLevel: generally-available
+  enableReporting: false
+  extraEnv:
+    - name: MY_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+  securityContext:
+    privileged: true
+    runAsUser: 0
+    runAsGroup: 0
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  configMap:
+    create: true
+    content: |-
+      discovery.kubernetes "local_pods" {
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + env("MY_NODE_NAME")
+        }
+        role = "pod"
+      }
+
+      discovery.relabel "profile_targets" {
+        targets = discovery.kubernetes.local_pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          regex         = "demo"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          regex         = "(checkout-demo|inventory-demo)"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "service_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_observability_ai_lab_environment"]
+          target_label  = "environment"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "node"
+        }
+      }
+
+      pyroscope.ebpf "lab" {
+        targets    = discovery.relabel.profile_targets.output
+        forward_to = [pyroscope.write.lab.receiver]
+      }
+
+      pyroscope.write "lab" {
+        endpoint {
+          url = "http://pyroscope.observability.svc.cluster.local:4040"
+        }
+      }

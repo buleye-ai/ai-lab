@@ -9,3 +9,4 @@ resources:
   - crashloop-demo.yaml
   - checkout-observability-lab.yaml
   - tracing.yaml
+  - profiling-lab.yaml
