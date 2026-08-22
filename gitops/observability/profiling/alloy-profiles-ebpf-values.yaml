@@ -1,8 +1,6 @@
-# Step 0 draft: isolated node-level eBPF profiling agent.
-# It is deliberately separate from the logs/events Alloy Deployment.
-# This file is NOT referenced by gitops/applications/kustomization.yaml yet.
-# WARNING: pyroscope.ebpf requires root + hostPID + privileged; the target filter
-# limits exported profile labels/data, not the agent's host-level visibility.
+# Isolated node-level eBPF profiler for the lab. It does not share the logs/events Alloy.
+# SECURITY: pyroscope.ebpf requires root + hostPID + privileged. Target filtering
+# limits exported profiles; it does not remove host-level process visibility.
 fullnameOverride: alloy-profiles-ebpf
 
 crds:
@@ -15,16 +13,28 @@ controller:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-  # Scope the PoC to one explicitly selected worker, rather than every node.
+  # Constrain this PoC to the one selected worker, not every Lab node.
   nodeSelector:
     kubernetes.io/hostname: k3d-ai-lab-agent-0
+  volumes:
+    extra:
+      # The only writable state for Alloy while its root FS remains read-only.
+      - name: alloy-runtime
+        emptyDir: {}
+
+global:
+  podSecurityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    seccompProfile:
+      type: Unconfined
 
 serviceAccount:
   create: true
   automountServiceAccountToken: true
 
-# Namespace-scoped read-only RBAC: discover Pods in demo only; no log, Event,
-# Node, Secret, config write, or Kubernetes mutation permission.
+# Scoped, read-only workload discovery. No ClusterRole/ClusterRoleBinding, logs,
+# events, nodes, secrets, or Kubernetes mutation privileges.
 rbac:
   create: true
   namespaces:
@@ -35,14 +45,6 @@ rbac:
       verbs: ["get", "list", "watch"]
   clusterRules: []
 
-# This is intentionally the only privileged workload in the PoC.
-global:
-  podSecurityContext:
-    runAsUser: 0
-    runAsGroup: 0
-    seccompProfile:
-      type: Unconfined
-
 alloy:
   stabilityLevel: generally-available
   enableReporting: false
@@ -51,6 +53,12 @@ alloy:
       valueFrom:
         fieldRef:
           fieldPath: spec.nodeName
+  # Root FS remains immutable; write runtime/remotecfg state only to this emptyDir.
+  storagePath: /var/lib/alloy
+  mounts:
+    extra:
+      - name: alloy-runtime
+        mountPath: /var/lib/alloy
   securityContext:
     privileged: true
     runAsUser: 0
