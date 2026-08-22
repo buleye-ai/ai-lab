@@ -97,7 +97,7 @@ alternateConfig:
       send_batch_size: 128
       timeout: 5s
   exporters:
-    otlphttp/tempo:
+    otlp_http/tempo:
       endpoint: http://tempo.observability.svc.cluster.local:4318
       tls:
         insecure: true
@@ -120,4 +120,4 @@ alternateConfig:
           - memory_limiter
           - batch
         exporters:
-          - otlphttp/tempo
+          - otlp_http/tempo
