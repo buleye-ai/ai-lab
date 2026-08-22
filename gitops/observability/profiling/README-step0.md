@@ -138,5 +138,6 @@ Pyroscope 可查询到目标 service 的 CPU profile
 - `6585579`：启用单节点 scoped eBPF Alloy；
 - `de84367`：为 Alloy runtime state 添加 emptyDir；
 - `f05b523`：为 eBPF symbol cache `/tmp` 添加 emptyDir；
+- `fc21a73`：将 Pod discovery 限定到 `demo`，并记录实际部署与实验手册。
 
 这些记录证明的是 Lab 部署与故障修正路径，不是生产平台部署经历。
