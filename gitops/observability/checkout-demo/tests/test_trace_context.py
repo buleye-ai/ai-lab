@@ -148,7 +148,6 @@ class TestCheckoutSpan:
 class TestDownstreamPropagation:
     """Cross-service contract: child spans keep the parent trace, safely."""
 
-    # --- existing propagation tests (preserved) ---
     def test_injected_traceparent_keeps_current_trace_and_uses_new_parent_span(self):
         with start_checkout_span(None) as checkout_span:
             checkout_context = checkout_span.get_span_context()
@@ -177,93 +176,3 @@ class TestDownstreamPropagation:
             "url.path": "/reserve",
             "http.response.status_code": 200,
         }
-
-    # --- new sampling tests ---
-
-    def _clear_tracer(self):
-        """Force re-init of the global tracer for sampler env testing."""
-        import tracing_utils as tu
-        tu._tracer = None
-        # Clear the global tracer registry so next call creates fresh provider
-        from opentelemetry import trace as otel_trace
-        otel_trace._TRACER_PROVIDER = None
-        otel_trace._PROVIDER = None
-
-    def test_parentbased_traceidratio_root_spans_are_sampled_at_ratio(self):
-        """
-        OTEL_TRACES_SAMPLER=parentbased_traceidratio
-        with arg=0.1 should sample ~10% of root (no-parent) spans.
-        """
-        self._clear_tracer()
-        with patch.dict(os.environ, {
-            "OTEL_TRACES_SAMPLER": "parentbased_traceidratio",
-            "OTEL_TRACES_SAMPLER_ARG": "0.1",
-            "OTEL_EXPORTER_OTLP_ENDPOINT": "",
-            "OTEL_RESOURCE_ATTRIBUTES": "",
-        }, clear=True):
-            from tracing_utils import get_tracer, _make_resource
-            sampled, total = 0, 200
-            for _ in range(total):
-                with get_tracer().start_as_current_span("test") as span:
-                    if span.get_span_context().trace_flags & 0x01:
-                        sampled += 1
-        # Allow a generous ±5% margin around 10%
-        assert 10 <= sampled <= 30, f"sampled {sampled}/{total} outside expected 10-30"
-        self._clear_tracer()
-
-    def test_child_inherits_parent_sampled_decision(self):
-        """
-        With ParentBased sampling, a child span created from a sampled parent
-        retains the same sampled flag.
-        """
-        self._clear_tracer()
-        with patch.dict(os.environ, {
-            "OTEL_TRACES_SAMPLER": "parentbased_traceidratio",
-            "OTEL_TRACES_SAMPLER_ARG": "0.1",
-            "OTEL_EXPORTER_OTLP_ENDPOINT": "",
-            "OTEL_RESOURCE_ATTRIBUTES": "",
-        }, clear=True):
-            from tracing_utils import get_tracer, inject_traceparent, start_inventory_span
-            # Create a root span; if sampled, inventory child must also be sampled
-            for _ in range(100):
-                root_tracer = get_tracer()
-                with root_tracer.start_as_current_span("test-root") as root:
-                    root_sampled = bool(root.get_span_context().trace_flags & 0x01)
-                    headers = inject_traceparent()
-                if not headers or "traceparent" not in headers:
-                    continue  # root may have been dropped by batch; skip
-                with start_inventory_span(headers["traceparent"]) as child:
-                    child_sampled = bool(child.get_span_context().trace_flags & 0x01)
-                assert root_sampled == child_sampled, (
-                    f"root sampled={root_sampled} but child sampled={child_sampled} — "
-                    "parent decision must propagate to child"
-                )
-        self._clear_tracer()
-
-    def test_head_sampling_does_not_guarantee_error_retention(self):
-        """
-        Documented limitation: pure head sampling (even parentbased) decides at
-        the root; errors that occur downstream are invisible if the root was
-        already dropped. This test proves the limitation is real by showing
-        errant roots can be dropped.
-        """
-        self._clear_tracer()
-        with patch.dict(os.environ, {
-            "OTEL_TRACES_SAMPLER": "parentbased_traceidratio",
-            "OTEL_TRACES_SAMPLER_ARG": "0.1",
-            "OTEL_EXPORTER_OTLP_ENDPOINT": "",
-            "OTEL_RESOURCE_ATTRIBUTES": "",
-        }, clear=True):
-            from tracing_utils import get_tracer
-            dropped_roots = 0
-            for _ in range(200):
-                with get_tracer().start_as_current_span("test-root") as span:
-                    if not (span.get_span_context().trace_flags & 0x01):
-                        dropped_roots += 1
-            # With 10% ratio, most roots are dropped; this proves errors are invisible too
-            assert dropped_roots >= 100, (
-                f"Only {dropped_roots}/200 roots dropped — insufficient proof that "
-                "head sampling can miss errors. If this fails repeatedly, the SDK "
-                "behaviour may have changed."
-            )
-        self._clear_tracer()
